@@ -5,16 +5,16 @@
 
 using namespace std;
 
-typedef vector<vector<double>> matrix;
+typedef vector<vector<double>> Matrix;
 
 template <typename T>
-void print(vector<T>& v) {
+void print(const vector<T>& v) {
     for(size_t i = 0; i < v.size(); ++i)
         cout << v[i]<< " ";
     cout << endl;
 }
 
-void print(matrix& M) {
+void print(const Matrix& M) {
     for(size_t i = 0; i < M.size(); ++i)
         print(M[i]);
 }
@@ -24,6 +24,7 @@ void int_randomize(vector<int>& v, int x) {
         v[i] = rand() % x;
 }
 
+//TODO: use methods from random module instead of rand()
 void bad_randomize(vector<double>& v) {
     int s = 0;
     for (size_t i = 0; i < v.size(); ++i) {
@@ -34,7 +35,7 @@ void bad_randomize(vector<double>& v) {
         v[i]  = 1.0 * v[i] / s;
 }
 
-void bad_randomize(matrix& M) {
+void bad_randomize(Matrix& M) {
     for (size_t i = 0; i < M.size(); ++i)
         bad_randomize(M[i]);
 }
@@ -42,19 +43,14 @@ void bad_randomize(matrix& M) {
 class HMM {
 private:
     vector<double> initial_distribtion; //initial probability distribution
-    matrix transition; // transition[i][j] is probability of going into state j after state i
-    matrix observation; // observation[i][j] is probability of symbol i in state j
-    matrix alpha; //alpha[t][j] is probability to see Y1,...Yt and state Xt = j
-    matrix beta; //beta [t][j] is probability to see Y(t+1),...Yk if Xt = j
-    matrix gamma;
-    vector<matrix> xi;
+    Matrix transition; // transition[i][j] is probability of going into state j after state i
+    Matrix observation; // observation[i][j] is probability of symbol i in state j
+    Matrix alpha; //alpha[t][j] is probability to see Y1,...Yt and state Xt = j
+    Matrix beta; //beta [t][j] is probability to see Y(t+1),...Yk if Xt = j
+    Matrix gamma;
+    vector<Matrix> xi;
     vector<int> Y; // the given sequence
     int n, m, T;
-public:
-    HMM(matrix& A, matrix& B, vector<double>& p0) : transition(A), observation(B), initial_distribtion(p0) {
-        n = initial_distribtion.size();
-        m = observation.size();
-    }
 
     void forward_procedure() {
         for (size_t j = 0; j < n; ++j)
@@ -141,14 +137,19 @@ public:
             }
         }
     }
+public:
+    HMM(const Matrix& A, const Matrix& B, const vector<double>& p0) : transition(A), observation(B), initial_distribtion(p0) {
+        n = initial_distribtion.size();
+        m = observation.size();
+    }
 
     void learn(const vector<int>& sequence) {
         T = sequence.size();
         Y = sequence;
-        alpha = matrix(T, vector<double>(n));
-        beta = matrix(T, vector<double>(n));
-        gamma = matrix(T, vector<double>(n));
-        xi = vector<matrix>(T - 1, matrix(n, vector<double>(n)));
+        alpha = Matrix(T, vector<double>(n));
+        beta = Matrix(T, vector<double>(n));
+        gamma = Matrix(T, vector<double>(n));
+        xi = vector<Matrix>(T - 1, Matrix(n, vector<double>(n)));
         forward_procedure();
         backward_procedure();
         calculate_gamma();
@@ -172,8 +173,8 @@ public:
 int main()
 {
     int n = 3, m = 5, T = 6;
-    matrix A (n, vector<double>(n));
-    matrix B (m, vector<double>(n));
+    Matrix A (n, vector<double>(n));
+    Matrix B (m, vector<double>(n));
     vector<int> Y(T);
     vector<double> p0(n);
 
