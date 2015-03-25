@@ -9,13 +9,13 @@ typedef vector<vector<double>> Matrix;
 
 template <typename T>
 void print(const vector<T>& v) {
-    for(size_t i = 0; i < v.size(); ++i)
+    for (size_t i = 0; i < v.size(); ++i)
         cout << v[i]<< " ";
     cout << endl;
 }
 
 void print(const Matrix& M) {
-    for(size_t i = 0; i < M.size(); ++i)
+    for (size_t i = 0; i < M.size(); ++i)
         print(M[i]);
 }
 
@@ -47,12 +47,12 @@ private:
     Matrix observation; // observation[i][j] is probability of symbol i in state j
     Matrix alpha; //alpha[t][j] is probability to see Y1,...Yt and state Xt = j
     Matrix beta; //beta [t][j] is probability to see Y(t+1),...Yk if Xt = j
+    vector<int> Y; // the given sequence
+    int n, m, T; // numbers of state, observation symbols and observed symbols respectively
     Matrix gamma;
     vector<Matrix> xi;
-    vector<int> Y; // the given sequence
-    int n, m, T;
 
-    void forward_procedure() {
+    void ForwardProcedure() {
         for (size_t j = 0; j < n; ++j)
             alpha[0][j] = initial_distribtion[j] * observation[Y[0]][j];
         for (size_t t = 1; t < T; ++t)
@@ -64,7 +64,7 @@ private:
             }
     }
 
-    void backward_procedure() {
+    void BackwardProcedure() {
         for (size_t j = 0; j < n; ++j)
             beta[T - 1][j] = 1;
         for (int t = T - 2; t >= 0; --t)
@@ -75,29 +75,29 @@ private:
             }
     }
 
-    void calculate_gamma() {
-        double sum = 0;
-        for (size_t t = 0; t < T; ++t) {
-            sum = 0;
-            for (size_t j = 0; j < n; ++j)
-                sum += alpha[t][j] * beta[t][j];
+// TODO: save the sequence probability
+    void CalculateGamma() {
+        double seq_probability = 0;
+        for (size_t i = 0; i < n; ++i)
+            seq_probability += alpha[T - 1][i];
+
+        for (size_t t = 0; t < T; ++t)
             for (size_t i = 0; i < n; ++i)
-                gamma[t][i] = alpha[t][i] * beta[t][i] / sum;
-            }
+                gamma[t][i] = alpha[t][i] * beta[t][i] / seq_probability;
         /*cout << "GAMMA" << endl;
         print(gamma);
         cout << endl;*/
     }
 
-    void calculate_xi() {
-        double sum = 0;
+    void CalculateXi() {
+        double seq_probability = 0;
+        for (size_t i = 0; i < n; ++i)
+            seq_probability += alpha[T - 1][i];
+
         for (size_t t = 0; t < T - 1; ++t) {
-            sum = 0;
-            for (size_t j = 0; j < n; ++j)
-                sum += alpha[t][j] * beta[t][j];
             for (size_t i = 0; i < n; ++i)
                 for (size_t j = 0; j < n; ++j)
-                    xi[t][i][j] = alpha[t][i] * transition[i][j] * beta[t + 1][j] * observation[Y[t + 1]][j] / sum;
+                    xi[t][i][j] = alpha[t][i] * transition[i][j] * beta[t + 1][j] * observation[Y[t + 1]][j] / seq_probability;
         }
         /*cout << "XI" << endl;
         for (size_t t = 0; t < T - 1; ++t) {
@@ -106,34 +106,34 @@ private:
         }*/
     }
 
-    void update_transition() {
-        double sum = 0;
+    void UpdateTransition() {
+        double denom = 0;
         for (size_t i = 0; i < n; ++i) {
-            sum = 0;
+            denom = 0;
             for (size_t t = 0; t < T - 1; ++t)
-                sum += gamma[t][i];
+                denom += gamma[t][i];
             for (size_t j = 0; j < n; ++j) {
                 transition[i][j] = 0;
                 for (size_t t = 0; t < T - 1; ++t)
                     transition[i][j] += xi[t][i][j];
-                transition[i][j] /= sum;
+                transition[i][j] /= denom;
             }
         }
     }
 
-    void update_observation() {
-        double sum = 0;
+    void UpdateObservation() {
+        double denom = 0;
         for (size_t i = 0; i < n; ++i) {
-            sum = 0;
+            denom = 0;
             for (size_t t = 0; t < T; ++t)
-                sum += gamma[t][i];
+                denom += gamma[t][i];
             for (size_t j = 0; j < m; ++j) {
                 observation[j][i] = 0;
                 for (size_t t = 0; t < T; ++t)
                     if (Y[t] == j) {
                         observation[j][i] += gamma[t][i];
                     }
-                observation[j][i] /= sum;
+                observation[j][i] /= denom;
             }
         }
     }
@@ -143,22 +143,49 @@ public:
         m = observation.size();
     }
 
-    void learn(const vector<int>& sequence) {
-        T = sequence.size();
+    double SequenceProbability(const vector<int>& sequence) {
         Y = sequence;
+        T = Y.size();
+        alpha = Matrix(T, vector<double>(n));
+        ForwardProcedure();
+        double probability = 0;
+        for (size_t i = 0; i < n; ++i)
+            probability += alpha[T - 1][i];
+        return probability;
+    }
+
+    vector<int> Apply(const vector<int>& sequence) {
+        Y = sequence;
+        T = Y.size();
+        alpha = Matrix(T, vector<double>(n));
+        beta = Matrix(T, vector<double>(n));
+        gamma = Matrix(T, vector<double>(n));
+        ForwardProcedure();
+        BackwardProcedure();
+        CalculateGamma();
+
+        vector<int> most_likely_states(T);
+        for (size_t t = 0; t < T; ++t)
+            most_likely_states[t] = max_element(gamma[t].begin(), gamma[t].end()) - gamma[t].begin();
+        return most_likely_states;
+    }
+
+    void Learn(const vector<int>& sequence) {
+        Y = sequence;
+        T = Y.size();
         alpha = Matrix(T, vector<double>(n));
         beta = Matrix(T, vector<double>(n));
         gamma = Matrix(T, vector<double>(n));
         xi = vector<Matrix>(T - 1, Matrix(n, vector<double>(n)));
-        forward_procedure();
-        backward_procedure();
-        calculate_gamma();
-        calculate_xi();
+        ForwardProcedure();
+        BackwardProcedure();
+        CalculateGamma();
+        CalculateXi();
         initial_distribtion = gamma[0];
-        update_transition();
-        update_observation();
+        UpdateTransition();
+        UpdateObservation();
 
-        cout << "NEW PI" << endl;
+ /*       cout << "NEW PI" << endl;
         print(initial_distribtion);
         cout << endl;
         cout << "NEW TRANSITION" << endl;
@@ -167,6 +194,7 @@ public:
         cout << "NEW OBSERVATION" << endl;
         print(observation);
         cout << endl;
+*/
     }
 };
 
@@ -197,5 +225,5 @@ int main()
     cout << endl;
 
     HMM a(A, B, p0);
-    a.learn(Y);
+    a.Learn(Y);
 }
