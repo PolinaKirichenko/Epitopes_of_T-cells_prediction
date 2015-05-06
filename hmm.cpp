@@ -1,22 +1,27 @@
-#include <iostream>
-#include <vector>
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
+#include <iostream>
+#include <vector>
 
 using namespace std;
 
 typedef vector<vector<double>> Matrix;
 
 template <typename T>
-void print(const vector<T>& v) {
+ostream& operator << (ostream& o, const vector<T>& v) {
     for (size_t i = 0; i < v.size(); ++i)
-        cout << v[i]<< " ";
-    cout << endl;
+        o << v[i]<< " ";
+    o << endl;
+    return o;
 }
 
-void print(const Matrix& M) {
+ostream& operator << (ostream& o, const Matrix& M) {
     for (size_t i = 0; i < M.size(); ++i)
-        print(M[i]);
+        o << M[i];
+    return o;
 }
 
 void int_randomize(vector<int>& v, int x) {
@@ -28,7 +33,7 @@ void int_randomize(vector<int>& v, int x) {
 void bad_randomize(vector<double>& v) {
     int s = 0;
     for (size_t i = 0; i < v.size(); ++i) {
-        v[i] = rand() % 100;
+        v[i] = rand() % 100 + 1;
         s += v[i];
     }
     for (size_t i = 0; i < v.size(); ++i)
@@ -42,115 +47,135 @@ void bad_randomize(Matrix& M) {
 
 class HMM {
 private:
-    vector<double> initial_distribtion; //initial probability distribution
+    vector<double> initial_distribution; //initial probability distribution
     Matrix transition; // transition[i][j] is probability of going into state j after state i
     Matrix observation; // observation[i][j] is probability of symbol i in state j
-    Matrix alpha; //alpha[t][j] is probability to see Y1,...Yt and state Xt = j
-    Matrix beta; //beta [t][j] is probability to see Y(t+1),...Yk if Xt = j
+    Matrix alpha; //alpha[t][j] is probability to observe Y1,...Yt and state Xt = j
+    Matrix beta; //beta [t][j] is probability to observe Y(t+1),...Yk if Xt = j
     vector<int> Y; // the given sequence
     int n, m, T; // numbers of state, observation symbols and observed symbols respectively
     Matrix gamma;
     vector<Matrix> xi;
 
-    void ForwardProcedure() {
+    void scale(vector<double>& v, double c) {
+        for (size_t i = 0; i < v.size(); ++i)
+            v[i] /= c;
+    }
+
+    void ForwardProcedure(vector<double>& scaling_numbers) {
         for (size_t j = 0; j < n; ++j)
-            alpha[0][j] = initial_distribtion[j] * observation[Y[0]][j];
-        for (size_t t = 1; t < T; ++t)
+            alpha[0][j] = initial_distribution[j] * observation[Y[0]][j];
+        scaling_numbers[0] = accumulate(alpha[0].begin(), alpha[0].end(), 0.0);
+        scale(alpha[0], scaling_numbers[0]);
+
+        for (size_t t = 1; t < T; ++t) {
             for (size_t j = 0; j < n; ++j) {
                 alpha[t][j] = 0;
                 for (size_t i = 0; i < n; ++i)
                     alpha[t][j] += alpha[t - 1][i] * transition[i][j];
                 alpha[t][j] *= observation[Y[t]][j];
             }
+            scaling_numbers[t] = accumulate(alpha[t].begin(), alpha[t].end(), 0.0);
+            scale(alpha[t], scaling_numbers[t]);
+        }
+        //cout << "ALPHA" << endl << alpha << endl;
     }
 
-    void BackwardProcedure() {
+    void BackwardProcedure(vector<double>& scaling_numbers) {
         for (size_t j = 0; j < n; ++j)
             beta[T - 1][j] = 1;
-        for (int t = T - 2; t >= 0; --t)
+        scale(beta[T - 1], scaling_numbers[T - 1]);
+
+        for (int t = T - 2; t >= 0; --t) {
             for (size_t i = 0; i < n; ++i) {
                 beta[t][i] = 0;
                 for (size_t j = 0; j < n; ++j)
                     beta[t][i] += beta[t + 1][j] * transition[i][j] * observation[Y[t + 1]][j];
             }
+            scale(beta[t], scaling_numbers[t]);
+        }
+        //cout << "BETA" << endl << beta << endl;
     }
 
-// TODO: save the sequence probability
     void CalculateGamma() {
-        double seq_probability = 0;
-        for (size_t i = 0; i < n; ++i)
-            seq_probability += alpha[T - 1][i];
-
+        double denom;
         for (size_t t = 0; t < T; ++t)
-            for (size_t i = 0; i < n; ++i)
-                gamma[t][i] = alpha[t][i] * beta[t][i] / seq_probability;
-        /*cout << "GAMMA" << endl;
-        print(gamma);
-        cout << endl;*/
+            for (size_t i = 0; i < n; ++i) {
+                denom = 0;
+                for (size_t j = 0; j < n; ++j)
+                    denom += alpha[t][j] * beta[t][j];
+                gamma[t][i] = alpha[t][i] * beta[t][i] / denom;
+            }
+        //cout << "GAMMA" << endl << gamma << endl;
     }
 
     void CalculateXi() {
-        double seq_probability = 0;
-        for (size_t i = 0; i < n; ++i)
-            seq_probability += alpha[T - 1][i];
-
+        double denom;
         for (size_t t = 0; t < T - 1; ++t) {
+            denom = 0;
             for (size_t i = 0; i < n; ++i)
                 for (size_t j = 0; j < n; ++j)
-                    xi[t][i][j] = alpha[t][i] * transition[i][j] * beta[t + 1][j] * observation[Y[t + 1]][j] / seq_probability;
+                    denom += alpha[t][i] * transition[i][j] * beta[t + 1][j] * observation[Y[t + 1]][j];
+            for (size_t i = 0; i < n; ++i)
+                for (size_t j = 0; j < n; ++j)
+                    xi[t][i][j] = alpha[t][i] * transition[i][j] * beta[t + 1][j] * observation[Y[t + 1]][j] / denom;
         }
         /*cout << "XI" << endl;
-        for (size_t t = 0; t < T - 1; ++t) {
-            print(xi[t]);
-            cout << endl;
-        }*/
+        for (size_t t = 0; t < T - 1; ++t)
+            cout << xi[t] << endl;*/
     }
 
     void UpdateTransition() {
-        double denom = 0;
+        double num, denom;
         for (size_t i = 0; i < n; ++i) {
             denom = 0;
             for (size_t t = 0; t < T - 1; ++t)
                 denom += gamma[t][i];
             for (size_t j = 0; j < n; ++j) {
-                transition[i][j] = 0;
+                num = 0;
                 for (size_t t = 0; t < T - 1; ++t)
-                    transition[i][j] += xi[t][i][j];
-                transition[i][j] /= denom;
+                    num += xi[t][i][j];
+                transition[i][j] = 0.1 * transition[i][j] + 0.9 * num / denom;
             }
         }
     }
 
     void UpdateObservation() {
-        double denom = 0;
+        double num, denom;
         for (size_t i = 0; i < n; ++i) {
             denom = 0;
             for (size_t t = 0; t < T; ++t)
                 denom += gamma[t][i];
             for (size_t j = 0; j < m; ++j) {
-                observation[j][i] = 0;
+                num = 0;
                 for (size_t t = 0; t < T; ++t)
-                    if (Y[t] == j) {
-                        observation[j][i] += gamma[t][i];
-                    }
-                observation[j][i] /= denom;
+                    if (Y[t] == j)
+                        num += gamma[t][i];
+                observation[j][i] = 0.1 * observation[j][i] + 0.9 * num / denom;
             }
         }
     }
 public:
-    HMM(const Matrix& A, const Matrix& B, const vector<double>& p0) : transition(A), observation(B), initial_distribtion(p0) {
-        n = initial_distribtion.size();
+    HMM(const Matrix& A, const Matrix& B, const vector<double>& p0) : transition(A), observation(B), initial_distribution(p0) {
+        n = initial_distribution.size();
         m = observation.size();
+    }
+
+    void ShowModelParameters(ostream& out) {
+        out << "INITIAL DISTRIBUTION" << endl << initial_distribution << endl;
+        out << "TRANSITION" << endl << transition << endl;
+        out << "OBSERVATION PROBABILITY" << endl << observation << endl;
     }
 
     double SequenceProbability(const vector<int>& sequence) {
         Y = sequence;
         T = Y.size();
         alpha = Matrix(T, vector<double>(n));
-        ForwardProcedure();
-        double probability = 0;
-        for (size_t i = 0; i < n; ++i)
-            probability += alpha[T - 1][i];
+        vector<double> scaling_numbers(T);
+        ForwardProcedure(scaling_numbers);
+        double probability = 1;
+        for (size_t i = 0; i < T; ++i)
+            probability *= scaling_numbers[i];
         return probability;
     }
 
@@ -160,8 +185,10 @@ public:
         alpha = Matrix(T, vector<double>(n));
         beta = Matrix(T, vector<double>(n));
         gamma = Matrix(T, vector<double>(n));
-        ForwardProcedure();
-        BackwardProcedure();
+
+        vector<double> scaling_numbers(T);
+        ForwardProcedure(scaling_numbers);
+        BackwardProcedure(scaling_numbers);
         CalculateGamma();
 
         vector<int> most_likely_states(T);
@@ -170,60 +197,21 @@ public:
         return most_likely_states;
     }
 
-    void Learn(const vector<int>& sequence) {
+    void Train(const vector<int>& sequence) {
         Y = sequence;
         T = Y.size();
         alpha = Matrix(T, vector<double>(n));
         beta = Matrix(T, vector<double>(n));
         gamma = Matrix(T, vector<double>(n));
         xi = vector<Matrix>(T - 1, Matrix(n, vector<double>(n)));
-        ForwardProcedure();
-        BackwardProcedure();
+
+        vector<double> scaling_numbers(T);
+        ForwardProcedure(scaling_numbers);
+        BackwardProcedure(scaling_numbers);
         CalculateGamma();
         CalculateXi();
-        initial_distribtion = gamma[0];
+        initial_distribution = gamma[0];
         UpdateTransition();
         UpdateObservation();
-
- /*       cout << "NEW PI" << endl;
-        print(initial_distribtion);
-        cout << endl;
-        cout << "NEW TRANSITION" << endl;
-        print(transition);
-        cout << endl;
-        cout << "NEW OBSERVATION" << endl;
-        print(observation);
-        cout << endl;
-*/
     }
 };
-
-int main()
-{
-    int n = 3, m = 5, T = 6;
-    Matrix A (n, vector<double>(n));
-    Matrix B (m, vector<double>(n));
-    vector<int> Y(T);
-    vector<double> p0(n);
-
-    srand(time(NULL));
-    bad_randomize(p0);
-    bad_randomize(A);
-    bad_randomize(B);
-    int_randomize(Y, m);
-    cout << "INITIAL PROBABILITY" << endl;
-    print(p0);
-    cout << endl;
-    cout << "TRANSITION" << endl;
-    print(A);
-    cout << endl;
-    cout << "OBSERVATION PROBABILITY" << endl;
-    print(B);
-    cout << endl;
-    cout << "SEQUENCE" << endl;
-    print(Y);
-    cout << endl;
-
-    HMM a(A, B, p0);
-    a.Learn(Y);
-}
