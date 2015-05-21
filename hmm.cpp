@@ -215,3 +215,64 @@ public:
         UpdateObservation();
     }
 };
+
+double iterate(vector<double>& old_prob, vector<double>& new_prob) {
+    double a = 1, b = 1;
+    for (size_t i = 0; i < old_prob.size(); ++i) {
+        a *= old_prob[i];
+        b *= new_prob[i];
+    }
+    return b - a;
+}
+
+int main()
+{
+    int n = 5, m = 10, T = 15;
+    Matrix A (n, vector<double>(n));
+    Matrix B (m, vector<double>(n));
+    vector<double> p0(n);
+    vector<vector<int>> Y(10);
+    for (size_t i = 0; i < 10; ++i)
+        Y[i].resize(T);
+
+    srand(time(NULL));
+    bad_randomize(p0);
+    bad_randomize(A);
+    bad_randomize(B);
+    for (size_t i = 0; i < 10; ++i)
+        int_randomize(Y[i], m);
+    /*p0 = {0.25, 0.25, 0.5};
+    A = { {0.4, 0.3, 0.3}, {0.3, 0.5, 0.2}, {0.3, 0.3, 0.4} };
+    B = { {0.5, 0.3, 0.2}, {0.3, 0.6, 0.1}, {0.2, 0.1, 0.7} };
+    Y = {1, 1, 1, 1, 1, 1};
+    Y1 = {1, 0, 2, 2, 1, 0}; */
+
+    ofstream out("output.txt");
+    HMM a(A, B, p0);
+    a.ShowModelParameters(out);
+    out << "SEQUENCES" << endl;
+    for (size_t i = 0; i < 10; ++i)
+        out << Y[i];
+
+    vector<double> old_prob(10);
+    vector<double> new_prob(10);
+    for (size_t i = 0; i < 10; ++i)
+        new_prob[i]  = a.SequenceProbability(Y[i]);
+    out << "PROBABILITIES" << endl << new_prob << endl << endl << "TRAINING" << endl;
+    int c = 0;
+    while (iterate(old_prob, new_prob) >= 0) {
+        ++c;
+        for (size_t i = 0; i < 10; ++i)
+            a.Train(Y[i]);
+        old_prob = new_prob;
+        for (size_t j = 0; j < 10; ++j)
+            new_prob[j] = a.SequenceProbability(Y[j]);
+    }
+    out << iterate(old_prob, new_prob) << endl;
+    out << "THE NUMBER OF ITERATIONS " << c << endl;
+    out << "NEW PARAMETERS" << endl;
+    a.ShowModelParameters(out);
+    out << "PROBABILITIES" << endl;
+    for (size_t i = 0; i < 10; ++i)
+        out << a.SequenceProbability(Y[i]) << endl;
+}
