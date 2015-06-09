@@ -27,7 +27,7 @@ void HMM::scale(std::vector<double>& v, double c) {
 void HMM::ForwardProcedure(const std::vector<int>& Y, std::vector<double>& scaling_numbers) {
     int T = Y.size();
     for (size_t j = 0; j < n; ++j)
-        alpha[0][j] = initial_distribution[j] * observation[Y[0]][j];
+        alpha[0][j] = initial_distribution[j] * observation[j][Y[0]];
     scaling_numbers[0] = accumulate(alpha[0].begin(), alpha[0].end(), 0.0);
     scale(alpha[0], scaling_numbers[0]);
 
@@ -36,7 +36,7 @@ void HMM::ForwardProcedure(const std::vector<int>& Y, std::vector<double>& scali
             alpha[t][j] = 0;
             for (size_t i = 0; i < n; ++i)
                 alpha[t][j] += alpha[t - 1][i] * transition[i][j];
-            alpha[t][j] *= observation[Y[t]][j];
+            alpha[t][j] *= observation[j][Y[t]];
         }
         scaling_numbers[t] = accumulate(alpha[t].begin(), alpha[t].end(), 0.0);
         scale(alpha[t], scaling_numbers[t]);
@@ -54,7 +54,7 @@ void HMM::BackwardProcedure(const std::vector<int>& Y, std::vector<double>& scal
         for (size_t i = 0; i < n; ++i) {
             beta[t][i] = 0;
             for (size_t j = 0; j < n; ++j)
-                beta[t][i] += beta[t + 1][j] * transition[i][j] * observation[Y[t + 1]][j];
+                beta[t][i] += beta[t + 1][j] * transition[i][j] * observation[j][Y[t + 1]];
         }
         scale(beta[t], scaling_numbers[t]);
     }
@@ -63,13 +63,14 @@ void HMM::BackwardProcedure(const std::vector<int>& Y, std::vector<double>& scal
 
 void HMM::CalculateGamma(int T, int k) {
     double denom;
-    for (size_t t = 0; t < T; ++t)
+    for (size_t t = 0; t < T; ++t) {
         for (size_t i = 0; i < n; ++i) {
             denom = 0;
             for (size_t j = 0; j < n; ++j)
                 denom += alpha[t][j] * beta[t][j];
             gamma[k][t][i] = alpha[t][i] * beta[t][i] / denom;
         }
+    }
     //std::cout << "GAMMA" << std::endl << gamma << std::endl;
 }
 
@@ -79,10 +80,10 @@ void HMM::CalculateXi(const std::vector<int>& Y, int k) {
         denom = 0;
         for (size_t i = 0; i < n; ++i)
             for (size_t j = 0; j < n; ++j)
-                denom += alpha[t][i] * transition[i][j] * beta[t + 1][j] * observation[Y[t + 1]][j];
+                denom += alpha[t][i] * transition[i][j] * beta[t + 1][j] * observation[j][Y[t + 1]];
         for (size_t i = 0; i < n; ++i)
             for (size_t j = 0; j < n; ++j)
-                xi[k][t][i][j] = alpha[t][i] * transition[i][j] * beta[t + 1][j] * observation[Y[t + 1]][j] / denom;
+                xi[k][t][i][j] = alpha[t][i] * transition[i][j] * beta[t + 1][j] * observation[j][Y[t + 1]] / denom;
     }
     /*std::cout << "XI" << std::endl;
     for (size_t t = 0; t < T - 1; ++t)
@@ -121,7 +122,7 @@ void HMM::UpdateObservation(const std::vector<std::vector<int>>& training_set) {
                 for (size_t t = 0; t < training_set[k].size(); ++t)
                     if (training_set[k][t] == j)
                         num += gamma[k][t][i];
-            observation[j][i] = 0.1 * observation[j][i] + 0.9 * num / denom;
+            observation[i][j] = 0.1 * observation[i][j] + 0.9 * num / denom;
         }
     }
 }
@@ -135,7 +136,7 @@ double HMM::CalculateLogProbability(const std::vector<double>& scaling_numbers) 
 
 HMM::HMM(const Matrix& A, const Matrix& B, const std::vector<double>& p0) : transition(A), observation(B), initial_distribution(p0) {
     n = initial_distribution.size();
-    m = observation.size();
+    m = observation[0].size();
 }
 
 void HMM::ShowModelParameters(std::ostream& out) {
@@ -176,7 +177,7 @@ std::vector<int> HMM::Apply(const std::vector<int>& sequence) {
     std::vector<std::vector<int>> tr(T);
     Matrix delta(T, std::vector<double>(n));
     for (size_t i = 0; i < n; ++i) {
-        delta[0][i] = log(initial_distribution[i] * observation[sequence[0]][i]);
+        delta[0][i] = log(initial_distribution[i] * observation[i][sequence[0]]);
         tr[0][i] = i;
     }
     for (size_t t = 1; t < T; ++t) {
@@ -184,8 +185,8 @@ std::vector<int> HMM::Apply(const std::vector<int>& sequence) {
             delta[t][i] = -INFINITY;
             tr[t][i] = 0;
             for (size_t j = 0; j < n; ++j) {
-                if (delta[t][i] < delta[t - 1][j] + log(transition[j][i]) + log(observation[sequence[t]][i])) {
-                    delta[t][i] = delta[t - 1][j] + log(transition[j][i]) + log(observation[sequence[t]][i]);
+                if (delta[t][i] < delta[t - 1][j] + log(transition[j][i]) + log(observation[i][sequence[t]])) {
+                    delta[t][i] = delta[t - 1][j] + log(transition[j][i]) + log(observation[i][sequence[t]]);
                     tr[t][i] = j;
                 }
             }

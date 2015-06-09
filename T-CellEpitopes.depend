@@ -1,0 +1,32 @@
+# depslib dependency file v1.0
+1433104003 source:c:\users\user\desktop\t-cellepitopes\hmm.cpp
+	<algorithm>
+	<cmath>
+	<vector>
+	"hmm.h"
+
+1433103981 c:\users\user\desktop\t-cellepitopes\hmm.h
+	<iostream>
+	<vector>
+
+1433603803 source:c:\users\user\desktop\epitopes_of_t-cells_prediction\hmm.cpp
+	<algorithm>
+	<cmath>
+	<vector>
+	"hmm.h"
+
+1433603823 c:\users\user\desktop\epitopes_of_t-cells_prediction\hmm.h
+	<iostream>
+	<vector>
+
+1433603963 source:c:\users\user\desktop\epitopes_of_t-cells_prediction\main.cpp
+	<ctime>
+	<cmath>
+	<cstdlib>
+	<fstream>
+	<iostream>
+	<map>
+	<string>
+	<vector>
+	"hmm.h"
+
